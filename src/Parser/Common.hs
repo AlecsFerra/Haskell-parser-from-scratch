@@ -7,13 +7,7 @@ import Debug.Trace (trace)
 import GHC.IO.Unsafe (unsafePerformIO)
 
 char :: Char -> Parser Char
-char expected = Parser parse
-  where
-    parse ((line, char), found:rest)
-      | found == expected = Right (pos,          rest, found)
-      | otherwise =         Left  ((line, char), [[expected]])
-        where pos = if found == '\n' then (line + 1, 0) else (line, char + 1)
-    parse ((line, char), []) = Left ((line, char), [[expected]])
+char expected = match (== expected) [expected]
 
 string :: String -> Parser String
 string = traverse char
@@ -39,8 +33,12 @@ match condition message = Parser parse
 whitespace :: Parser String
 whitespace = while isSpace
 
-stringLiteral :: Parser String
-stringLiteral = char '\"' *> while ('\"' /=) <* char '\"'
+-- TODO: fix
+--stringLiteral :: Parser String
+--stringLiteral = char '\"' *> while ('\"' /=) <* char '\"'
+-- TODO: fix
+--charLiteral :: Parser Char
+--charLiteral = char '\'' *> match (const True) "Char literal" <* char '\''
 
 separatedBy :: Parser a -> Parser b -> Parser [a]
 separatedBy element separator = (:) <$> element <*> many (separator *> element) <|> pure []
@@ -51,16 +49,19 @@ sign = string "+" <|> string "-" <|> string ""
 digit :: Parser Char
 digit = match isDigit "Digit"
 
-integer :: Parser String
+integer :: Parser Integer
 integer = Parser $ \inp -> do
   (pos,  tokens, sign)    <- run sign inp
   (pos', tokens', digits) <- run (some digit) (pos, tokens)
-  Right (pos', tokens', read . show $ sign ++ digits)
-  
-{--float :: Parser Float
+  Right (pos', tokens', read $ if sign == "-" then sign ++ digits
+                                              else digits)
+
+float :: Parser Float
 float = Parser $ \inp -> do
   (pos,  tokens, sign)       <- run sign inp
   (pos', tokens', digits)    <- run (some digit) (pos, tokens)
   (pos'', tokens'', dot)     <- run (string "." <|> string "") (pos', tokens')
   (pos''', tokens''', float) <- run (many digit) (pos'', tokens'')
-  Right (pos''', tokens''', read . show $ sign ++ digits ++ dot ++ float)-}
+  let  rest = digits ++ dot ++ float in
+    Right (pos''', tokens''', read $ if sign == "-" then sign ++ rest
+                                                    else rest)
