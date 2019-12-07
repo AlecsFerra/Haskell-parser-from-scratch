@@ -1,0 +1,6 @@
+.stack-work/
+json-parser.cabal
+*.iml
+*.lock
+.idea
+*~
