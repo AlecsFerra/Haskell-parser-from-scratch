@@ -3,14 +3,14 @@ module Parser.Common where
 import Parser.Parser
 import Data.Char
 import Control.Applicative
-import Debug.Trace (trace)
-import GHC.IO.Unsafe (unsafePerformIO)
 
 char :: Char -> Parser Char
 char expected = match (== expected) [expected]
 
 string :: String -> Parser String
-string = traverse char
+string expected = traverse toMatch expected
+  where toMatch :: Char -> Parser Char
+        toMatch c = match (== c) expected
 
 while :: (Char -> Bool) -> Parser String
 while f =
@@ -33,12 +33,20 @@ match condition message = Parser parse
 whitespace :: Parser String
 whitespace = while isSpace
 
--- TODO: fix
---stringLiteral :: Parser String
---stringLiteral = char '\"' *> while ('\"' /=) <* char '\"'
--- TODO: fix
---charLiteral :: Parser Char
---charLiteral = char '\'' *> match (const True) "Char literal" <* char '\''
+-- TODO: support escaped chars
+stringLiteral :: Parser String
+stringLiteral = Parser $ \inp -> do
+  (pos,   tokens, _)    <- run (char '\"') inp
+  (pos',  tokens', str) <- run (while (/= '\"')) (pos, tokens)
+  (pos'', tokens'', _)  <- run (char '\"') (pos', tokens')
+  Right (pos'', tokens'', str)
+
+charLiteral :: Parser Char
+charLiteral = Parser $ \inp -> do
+  (pos,   tokens, _)    <- run (char '\'') inp
+  (pos',  tokens', chr) <- run (match (const True) "Character") (pos, tokens)
+  (pos'', tokens'', _)  <- run (char '\'') (pos', tokens')
+  Right (pos'', tokens'', chr)
 
 separatedBy :: Parser a -> Parser b -> Parser [a]
 separatedBy element separator = (:) <$> element <*> many (separator *> element) <|> pure []
@@ -61,7 +69,7 @@ float = Parser $ \inp -> do
   (pos,  tokens, sign)       <- run sign inp
   (pos', tokens', digits)    <- run (some digit) (pos, tokens)
   (pos'', tokens'', dot)     <- run (string "." <|> string "") (pos', tokens')
-  (pos''', tokens''', float) <- run (many digit) (pos'', tokens'')
+  (pos''', tokens''', float) <- run (if dot == "." then some digit else string "") (pos'', tokens'')
   let  rest = digits ++ dot ++ float in
     Right (pos''', tokens''', read $ if sign == "-" then sign ++ rest
                                                     else rest)
